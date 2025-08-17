@@ -2,8 +2,8 @@ name: BharatBuzz AI Automation
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours
-
+    - cron: "0 */2 * * *"   # every 2 hours (UTC)
+  workflow_dispatch:        # allows manual runs from GitHub Actions
 
 jobs:
   run:
