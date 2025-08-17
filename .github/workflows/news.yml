@@ -2,8 +2,7 @@ name: BharatBuzz AI Automation
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours (UTC)
-  workflow_dispatch:
+    - cron: "0 */2 * * *"   # every 2 hours
 
 
 jobs:
