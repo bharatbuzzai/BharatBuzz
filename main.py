@@ -5,23 +5,26 @@ import time
 import tweepy
 import feedparser
 from bs4 import BeautifulSoup
+import openai
+from datetime import datetime
 
 # -------------------------
-# Twitter credentials (from GitHub Actions env)
+# Twitter credentials
 # -------------------------
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
 TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
 
+# OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 # -------------------------
-# Configure Tweepy (try v2, fallback to v1.1)
+# Configure Tweepy
 # -------------------------
 client = None
 api_v1 = None
-
 try:
-    # v2 client (preferred)
     client = tweepy.Client(
         consumer_key=TWITTER_API_KEY,
         consumer_secret=TWITTER_API_SECRET,
@@ -33,7 +36,6 @@ except Exception as e:
     print("⚠️ Could not init Tweepy v2 client:", e)
 
 try:
-    # v1.1 fallback
     auth = tweepy.OAuth1UserHandler(TWITTER_API_KEY, TWITTER_API_SECRET)
     auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET)
     api_v1 = tweepy.API(auth)
@@ -41,7 +43,7 @@ except Exception as e:
     print("⚠️ Could not init Tweepy v1.1 API:", e)
 
 # -------------------------
-# RSS feeds (public)
+# RSS feeds (10+ Indian sources)
 # -------------------------
 RSS_FEEDS = [
     "https://indianexpress.com/feed/",
@@ -49,6 +51,11 @@ RSS_FEEDS = [
     "https://feeds.feedburner.com/ndtvnews-top-stories?format=xml",
     "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
     "https://www.livemint.com/rss/news",
+    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
+    "https://www.deccanherald.com/rss.xml",
+    "https://www.indiatoday.in/rss/1206578",
+    "https://www.news18.com/rss/india.xml",
+    "https://economictimes.indiatimes.com/feeds/newsdefault.cms",
 ]
 
 def clean_text(s: str) -> str:
@@ -59,60 +66,59 @@ def clean_text(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-def summarize(headline: str, description: str) -> str:
-    # Take headline + first sentence of description
-    desc = clean_text(description)
-    if "." in desc:
-        desc = desc.split(".")[0]
-    text = f"{clean_text(headline)} – {desc}".strip(" –")
-    return text
-
-def pick_latest_entry(entries):
-    # entries already sorted by feedparser typically; just take the first valid
-    for e in entries:
-        title = clean_text(getattr(e, "title", "")) or ""
-        link  = getattr(e, "link", "") or ""
-        if not title or not link:
-            continue
-        # Skip live blogs & videos
-        bad = ["live blog", "live updates", "video:", "watch:"]
-        if any(b.lower() in title.lower() for b in bad):
-            continue
-        return {"title": title, "link": link, "summary": clean_text(getattr(e, "summary", ""))}
-    return None
-
-def fetch_top_story():
-    all_entries = []
+def fetch_multiple_headlines(limit=20):
+    """Fetch top headlines from all feeds"""
+    headlines = []
     for feed in RSS_FEEDS:
         try:
             parsed = feedparser.parse(feed)
-            if parsed.entries:
-                all_entries.extend(parsed.entries[:5])  # take a few from each
+            for e in parsed.entries[:2]:  # top 2 per source
+                title = clean_text(getattr(e, "title", ""))
+                link = getattr(e, "link", "")
+                if title and link and len(title) > 25:
+                    headlines.append(f"{title} ({link})")
         except Exception as e:
             print(f"⚠️ RSS error {feed}: {e}")
+    return headlines[:limit]
 
-    if not all_entries:
-        print("No entries found from RSS.")
+def summarize_with_ai(headlines):
+    if not headlines:
+        return None
+    prompt = f"""
+    You are BharatBuzz AI, an Indian news summarizer.
+    Summarize these headlines into ONE clear news article (150 words max).
+    Remove repetition, merge context, and keep neutral tone.
+
+    Headlines:
+    {chr(10).join(headlines)}
+    """
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role":"system","content":"You summarize news for BharatBuzz AI."},
+                      {"role":"user","content":prompt}]
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        print("⚠️ OpenAI summarization failed:", e)
         return None
 
-    top = pick_latest_entry(all_entries)
-    return top
+def save_blog(summary):
+    if not summary:
+        return None
+    filename = f"news_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f"# BharatBuzz AI Daily News ({datetime.now().strftime('%d %B %Y')})\n\n")
+        f.write(summary)
+    return filename
 
-def compose_tweet(item):
-    headline = item["title"]
-    url = item["link"]
-    summary = summarize(headline, item.get("summary", ""))
-
-    tweet = f"{summary}\n\nRead: {url}\n#BharatBuzzAI #IndiaNews"
-    if len(tweet) > 280:
-        # Trim carefully
-        excess = len(tweet) - 280
-        summary_trimmed = summary[:-excess-3].rstrip() + "..."
-        tweet = f"{summary_trimmed}\n\nRead: {url}\n#BharatBuzzAI #IndiaNews"
-    return tweet
+def compose_tweet(summary_file, summary_text):
+    blog_url = f"https://bharatbuzzai.github.io/{summary_file}"
+    headline = summary_text.split(".")[0]  # take first sentence
+    tweet = f"{headline}...\n\nRead full: {blog_url}\n#BharatBuzzAI #IndiaNews"
+    return tweet[:280]
 
 def post_tweet(text):
-    # Try v2 first
     if client:
         try:
             client.create_tweet(text=text)
@@ -120,8 +126,6 @@ def post_tweet(text):
             return True
         except Exception as e:
             print("⚠️ v2 create_tweet failed:", e)
-
-    # Fallback to v1.1
     if api_v1:
         try:
             api_v1.update_status(status=text)
@@ -129,20 +133,16 @@ def post_tweet(text):
             return True
         except Exception as e:
             print("⚠️ v1.1 update_status failed:", e)
-
-    print("❌ Could not tweet (permissions or tokens may be wrong).")
     return False
 
 if __name__ == "__main__":
-    item = fetch_top_story()
-    if not item:
-        print("No story to tweet.")
+    headlines = fetch_multiple_headlines()
+    summary = summarize_with_ai(headlines)
+    if not summary:
+        print("No summary generated.")
     else:
-        tweet = compose_tweet(item)
-        print("Draft tweet:\n", tweet)
-        posted = post_tweet(tweet)
-        if posted:
-            print("Done.")
-        else:
-            print("Tweet failed.")
+        blog_file = save_blog(summary)
+        tweet = compose_tweet(blog_file, summary)
+        post_tweet(tweet)
+
 
