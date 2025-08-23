@@ -1,5 +1,8 @@
 requests
 feedparser
 beautifulsoup4
-tweepy
-python-dotenv
+tweepy==4.14.0
+transformers==4.41.2
+torch
+Pillow
+python-dateutil
