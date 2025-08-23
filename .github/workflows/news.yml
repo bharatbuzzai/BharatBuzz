@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # important: fetch full history for rebase
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,9 +42,12 @@ jobs:
           TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
         run: python main.py
 
-      - name: Commit blog & images
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: "docs/*.md images/*.jpg"
-          message: "chore(blog): publish latest BharatBuzz AI post"
+      - name: Commit and Push blog & images
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add docs/*.md images/*.jpg || echo "No files to add"
+          git commit -m "chore(blog): publish latest BharatBuzz AI post" || echo "No changes to commit"
+          git push origin main
 
