@@ -187,47 +187,45 @@ def summarize(text: str, max_words=SUMMARY_WORDS):
 # -------------------------
 # TWITTER (v2 API)
 # -------------------------
-def get_twitter_client():
-    bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
+# -------------------------
+# TWITTER (use v1.1 for media upload)
+# -------------------------
+def get_twitter_api():
     api_key = os.getenv("TWITTER_API_KEY")
     api_secret = os.getenv("TWITTER_API_SECRET")
     access_token = os.getenv("TWITTER_ACCESS_TOKEN")
     access_secret = os.getenv("TWITTER_ACCESS_SECRET")
 
-    if not all([bearer_token, api_key, api_secret, access_token, access_secret]):
+    if not all([api_key, api_secret, access_token, access_secret]):
         print("⚠️ Missing Twitter credentials")
         return None
 
     try:
-        client = tweepy.Client(
-            bearer_token=bearer_token,
-            consumer_key=api_key,
-            consumer_secret=api_secret,
-            access_token=access_token,
-            access_token_secret=access_secret
-        )
-        return client
+        auth = tweepy.OAuth1UserHandler(api_key, api_secret, access_token, access_secret)
+        api = tweepy.API(auth)
+        return api
     except Exception as e:
-        print("❌ Error creating Twitter client:", e)
+        print("❌ Error creating Twitter API:", e)
         return None
 
 
 def post_tweet_with_media(text: str, media_path: str = None):
-    client = get_twitter_client()
-    if not client:
+    api = get_twitter_api()
+    if not api:
         return False
 
     try:
         if media_path and os.path.exists(media_path):
-            media_id = client.media_upload(filename=media_path).media_id
-            client.create_tweet(text=text[:280], media_ids=[media_id])
+            media = api.media_upload(media_path)
+            api.update_status(status=text[:280], media_ids=[media.media_id])
         else:
-            client.create_tweet(text=text[:280])
+            api.update_status(status=text[:280])
         print("✅ Tweet posted.")
         return True
     except Exception as e:
         print("❌ Tweet failed:", e)
         return False
+
 
 
 # -------------------------
