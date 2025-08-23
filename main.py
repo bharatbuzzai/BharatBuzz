@@ -184,29 +184,51 @@ def summarize(text: str, max_words=SUMMARY_WORDS):
 # -------------------------
 # TWITTER
 # -------------------------
-def get_twitter_clients():
-    api_v1 = None
-    if all([TW_KEY, TW_SECRET, TW_ATOK, TW_ASEC]):
-        auth = tweepy.OAuth1UserHandler(TW_KEY, TW_SECRET)
-        auth.set_access_token(TW_ATOK, TW_ASEC)
-        api_v1 = tweepy.API(auth)
-    return api_v1
+# -------------------------
+# TWITTER (v2 API)
+# -------------------------
+def get_twitter_client():
+    bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
+    api_key = os.getenv("TWITTER_API_KEY")
+    api_secret = os.getenv("TWITTER_API_SECRET")
+    access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+    access_secret = os.getenv("TWITTER_ACCESS_SECRET")
+
+    if not all([bearer_token, api_key, api_secret, access_token, access_secret]):
+        print("⚠️ Missing Twitter credentials")
+        return None
+
+    try:
+        client = tweepy.Client(
+            bearer_token=bearer_token,
+            consumer_key=api_key,
+            consumer_secret=api_secret,
+            access_token=access_token,
+            access_token_secret=access_secret
+        )
+        return client
+    except Exception as e:
+        print("❌ Error creating Twitter client:", e)
+        return None
+
 
 def post_tweet_with_media(text: str, media_path: str = None):
-    api_v1 = get_twitter_clients()
-    if not api_v1:
-        print("⚠️ Twitter credentials missing.")
+    client = get_twitter_client()
+    if not client:
         return False
+
     try:
         if media_path and os.path.exists(media_path):
-            api_v1.update_status_with_media(status=text[:280], filename=media_path)
+            media_id = client.media_upload(filename=media_path).media_id
+            client.create_tweet(text=text[:280], media_ids=[media_id])
         else:
-            api_v1.update_status(status=text[:280])
+            client.create_tweet(text=text[:280])
         print("✅ Tweet posted.")
         return True
     except Exception as e:
         print("❌ Tweet failed:", e)
         return False
+
 
 # -------------------------
 # PIPELINE
