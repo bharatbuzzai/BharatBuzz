@@ -1,0 +1,54 @@
+name: BharatBuzz AI
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run news pipeline
+        env:
+          BLOG_BASE_URL: https://bharatbuzzai.github.io/BharatBuzz
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          BB_DEBUG: "1"
+        run: python main.py
+
+      - name: Commit & push blog and images
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+          git add docs/*.md images/*.jpg 2>/dev/null || true
+          git commit -m "chore(blog): publish latest BharatBuzz AI post" || echo "No changes to commit"
+          git push origin main || echo "Nothing to push"
