@@ -1,0 +1,8 @@
+feedparser
+beautifulsoup4
+requests
+tweepy==4.14.0
+python-dateutil
+Pillow
+transformers==4.40.0
+torch
