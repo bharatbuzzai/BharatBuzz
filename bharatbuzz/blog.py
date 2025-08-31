@@ -1,75 +1,118 @@
 import os
 import requests
-from bs4 import BeautifulSoup
-import schedule
-import time
+import random
 import tweepy
-from dotenv import load_dotenv
-from io import BytesIO
+from bs4 import BeautifulSoup
+from transformers import pipeline
+from datetime import datetime
 
-load_dotenv()
+# ---------------- CONFIG ---------------- #
+NEWS_SITES = [
+    "https://www.indiatoday.in",
+    "https://timesofindia.indiatimes.com",
+    "https://www.ndtv.com",
+    "https://www.thehindu.com"
+]
 
-# Twitter API keys
-API_KEY = os.getenv("TWITTER_API_KEY")
-API_SECRET = os.getenv("TWITTER_API_SECRET")
-ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
-ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
+BLOG_DIR = "blogs"
+os.makedirs(BLOG_DIR, exist_ok=True)
 
-auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
-api = tweepy.API(auth)
+# Load AI summarizer
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-# Scrape function
-def fetch_latest_news():
-    url = "https://www.thehindu.com/news/national/"  # Example news source
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
+# ---------------- SCRAPE FUNCTION ---------------- #
+def scrape_articles():
+    articles = []
+    images = []
 
-    # Extract first article
-    article = soup.find("a", class_="story-card75x1-text")  
-    if not article:
+    for site in NEWS_SITES:
+        try:
+            html = requests.get(site, timeout=10).text
+            soup = BeautifulSoup(html, "html.parser")
+
+            # find headlines
+            links = soup.find_all("a", href=True)[:10]
+            for link in links:
+                title = link.get_text().strip()
+                if len(title.split()) > 5:
+                    url = link["href"]
+                    if not url.startswith("http"):
+                        url = site + url
+                    articles.append({"title": title, "url": url})
+
+                    # try image
+                    img = soup.find("img")
+                    if img and img.get("src"):
+                        images.append(img["src"])
+        except Exception as e:
+            print(f"Error scraping {site}: {e}")
+            continue
+
+    return articles, images
+
+# ---------------- SUMMARY FUNCTION ---------------- #
+def summarize_articles(articles):
+    if not articles:
         return None, None
 
-    title = article.get_text(strip=True)
-    link = article["href"]
+    combined_text = " ".join([a["title"] for a in articles[:5]])
+    summary = summarizer(combined_text, max_length=40, min_length=10, do_sample=False)[0]['summary_text']
 
-    # Fetch image from article
-    img_url = None
-    article_page = requests.get(link)
-    article_soup = BeautifulSoup(article_page.text, "html.parser")
-    img_tag = article_soup.find("img")
-    if img_tag and img_tag.get("src"):
-        img_url = img_tag["src"]
+    headline = summary.strip()
+    return headline, summary
 
-    return title, img_url
+# ---------------- SAVE BLOG ---------------- #
+def save_blog(headline, summary, articles):
+    now = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = os.path.join(BLOG_DIR, f"{now}.md")
 
-# Tweet function
-def post_tweet():
-    title, img_url = fetch_latest_news()
-    if not title:
-        print("No news found.")
-        return
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f"# {headline}\n\n")
+        f.write(f"**Summary:** {summary}\n\n")
+        f.write("### Sources:\n")
+        for a in articles[:5]:
+            f.write(f"- [{a['title']}]({a['url']})\n")
+    return filename
 
-    try:
-        if img_url:
-            img_data = requests.get(img_url).content
-            filename = "temp.jpg"
-            with open(filename, "wb") as f:
+# ---------------- TWEET FUNCTION ---------------- #
+def post_tweet(headline, blog_file, images):
+    # Twitter Auth
+    auth = tweepy.OAuth1UserHandler(
+        os.getenv("TWITTER_API_KEY"),
+        os.getenv("TWITTER_API_SECRET"),
+        os.getenv("TWITTER_ACCESS_TOKEN"),
+        os.getenv("TWITTER_ACCESS_SECRET")
+    )
+    api = tweepy.API(auth)
+
+    # Blog link (simulate, replace later with real hosting URL)
+    blog_link = f"https://bharatbuzzai.github.io/{os.path.basename(blog_file)}"
+
+    # Pick one image
+    image_path = None
+    if images:
+        try:
+            img_url = random.choice(images)
+            img_data = requests.get(img_url, timeout=10).content
+            image_path = "temp.jpg"
+            with open(image_path, "wb") as f:
                 f.write(img_data)
-            api.update_status_with_media(status=title[:270], filename=filename)
-            os.remove(filename)
-            print(f"Tweeted with image: {title}")
-        else:
-            api.update_status(status=title[:280])
-            print(f"Tweeted (text only): {title}")
-    except Exception as e:
-        print(f"Error posting tweet: {e}")
+        except:
+            image_path = None
 
-# Scheduler (every 2 hours)
-schedule.every(2).hours.do(post_tweet)
+    # Tweet
+    tweet_text = f"{headline}\n\nRead more 👉 {blog_link}"
+    if image_path:
+        api.update_status_with_media(status=tweet_text, filename=image_path)
+    else:
+        api.update_status(status=tweet_text)
 
-print("Bot running... tweets will be posted every 2 hours.")
+# ---------------- MAIN ---------------- #
+if __name__ == "__main__":
+    articles, images = scrape_articles()
+    headline, summary = summarize_articles(articles)
 
-while True:
-    schedule.run_pending()
-    time.sleep(60)
+    if headline and summary:
+        blog_file = save_blog(headline, summary, articles)
+        post_tweet(headline, blog_file, images)
 
