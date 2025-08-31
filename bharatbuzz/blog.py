@@ -1,13 +1,15 @@
 import os
-import tweepy
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
-import random
+import schedule
+import time
+import tweepy
+from dotenv import load_dotenv
+from io import BytesIO
 
-# ===============================
-#  Twitter Authentication
-# ===============================
+load_dotenv()
+
+# Twitter API keys
 API_KEY = os.getenv("TWITTER_API_KEY")
 API_SECRET = os.getenv("TWITTER_API_SECRET")
 ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
@@ -16,66 +18,58 @@ ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
 auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
 api = tweepy.API(auth)
 
-# ===============================
-#  News Scraper
-# ===============================
-def scrape_news():
-    url = "https://www.indiatoday.in/news"  # Example news source
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+# Scrape function
+def fetch_latest_news():
+    url = "https://www.thehindu.com/news/national/"  # Example news source
+    response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    headlines = []
-    for item in soup.select("h2, h3"):
-        text = item.get_text(strip=True)
-        if text and len(text.split()) > 5:
-            headlines.append(text)
-    return headlines[:5]  # take top 5 headlines
+    # Extract first article
+    article = soup.find("a", class_="story-card75x1-text")  
+    if not article:
+        return None, None
 
-# ===============================
-#  Generate Blog Content
-# ===============================
-def generate_blog(headlines):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    blog_title = f"📰 BharatBuzz AI News Update ({now})"
-    blog_content = "Here are the top trending news updates in India:\n\n"
-    for i, headline in enumerate(headlines, 1):
-        blog_content += f"{i}. {headline}\n"
-    return blog_title, blog_content
+    title = article.get_text(strip=True)
+    link = article["href"]
 
-# ===============================
-#  Save Blog Locally
-# ===============================
-def save_blog(title, content):
-    filename = f"blog_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"# {title}\n\n{content}")
-    return filename
+    # Fetch image from article
+    img_url = None
+    article_page = requests.get(link)
+    article_soup = BeautifulSoup(article_page.text, "html.parser")
+    img_tag = article_soup.find("img")
+    if img_tag and img_tag.get("src"):
+        img_url = img_tag["src"]
 
-# ===============================
-#  Tweet with Headline + Blog Link
-# ===============================
-def tweet_news(headlines, blog_link):
-    headline = random.choice(headlines)  # pick a random headline
-    tweet_text = f"📰 {headline}\n\nRead full update here: {blog_link}"
-    
-    # Post tweet
-    api.update_status(tweet_text)
-    print("✅ Tweet posted:", tweet_text)
+    return title, img_url
 
-# ===============================
-#  Main
-# ===============================
-if __name__ == "__main__":
-    headlines = scrape_news()
-    if not headlines:
-        print("⚠️ No headlines found!")
-        exit()
+# Tweet function
+def post_tweet():
+    title, img_url = fetch_latest_news()
+    if not title:
+        print("No news found.")
+        return
 
-    title, content = generate_blog(headlines)
-    blog_file = save_blog(title, content)
+    try:
+        if img_url:
+            img_data = requests.get(img_url).content
+            filename = "temp.jpg"
+            with open(filename, "wb") as f:
+                f.write(img_data)
+            api.update_status_with_media(status=title[:270], filename=filename)
+            os.remove(filename)
+            print(f"Tweeted with image: {title}")
+        else:
+            api.update_status(status=title[:280])
+            print(f"Tweeted (text only): {title}")
+    except Exception as e:
+        print(f"Error posting tweet: {e}")
 
-    # Simulate blog link (later you can host on GitHub Pages or Notion API)
-    blog_link = f"https://bharatbuzzai.github.io/blogs/{blog_file}"
+# Scheduler (every 2 hours)
+schedule.every(2).hours.do(post_tweet)
 
-    tweet_news(headlines, blog_link)
+print("Bot running... tweets will be posted every 2 hours.")
+
+while True:
+    schedule.run_pending()
+    time.sleep(60)
 
