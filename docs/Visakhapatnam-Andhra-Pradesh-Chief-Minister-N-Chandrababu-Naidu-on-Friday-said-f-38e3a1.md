@@ -1,9 +1,0 @@
-# Visakhapatnam, Andhra Pradesh Chief Minister N Chandrababu Naidu on Friday said food processing — currently at
-
-*Published:* 29 August 2025, 12:45
-
-Visakhapatnam, Andhra Pradesh Chief Minister N Chandrababu Naidu on Friday said food processing — currently at just 12 per cent—is the solution to farmers’ woes and should be scaled up to 70 per cent. Addressing the India Food Manufacturing Summit in Vizag, Naidu said food processing would help farmers derive greater benefits at a time when large quantities of food are being wasted. “Food processing is the solution for farmers. We have to focus more. Farmers will get better benefits because of food processing. Today it stands at 12 per cent. There is a lot of scope, and we must raise it to 50, 60, or even 70 per cent—that is the potential available,” Naidu said. He claimed that the "global food processing industry is valued at USD 8 trillion, but India is lagging." Andhra Pradesh, he said, wants to push demand-driven agro-processing to cater to rising domestic and international demand. The TDP chief noted that the state already has 6,000 food processing units and derives 35 per cent of its GSDP from agriculture. Andhra Pradesh, he added, is well-placed to grow in this sector given its strengths in horticulture, livestock, aquaculture, and other allied activities. The state contribu
-
-**Sources:**
-- [India News: Latest India News, Today's breaking News Headlines & Real-time News coverage from India | Hindustan Times](https://www.hindustantimes.com/india-news/cm-naidu-pitches-food-processing-as-fix-for-farmers-targets-70-pc-scale-up-in-andhra-101756469237419.html)
-- [Deccan Chronicle - News Headlines | Today Headlines | Hyderabad News | English News | Top Stories | Breaking news](https://www.deccanchronicle.com/southern-states/andhra-pradesh/naidu-pitches-food-processing-as-fix-for-farmers-targets-70-pc-scale-up-in-andhra-1900345)
