@@ -1,0 +1,8 @@
+feedparser
+requests
+beautifulsoup4
+tweepy
+transformers
+torch
+python-dateutil
+pillow
