@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-.env
-*.sqlite
-docs/images/*.jpg
-temp_*.jpg
