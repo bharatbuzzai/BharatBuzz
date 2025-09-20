@@ -1,0 +1,10 @@
+# minimal free stack
+feedparser
+beautifulsoup4
+requests
+tweepy
+transformers
+torch
+sentencepiece
+Pillow
+python-dateutil
